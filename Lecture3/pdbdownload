@@ -1,0 +1,6 @@
+while read p;
+do
+  echo $p
+  curl -O https://files.rcsb.org/download/$p.pdb
+done<pdblist.txt
+

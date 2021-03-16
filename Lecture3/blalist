@@ -1,0 +1,15 @@
+# Run blast
+
+blastp -query $1 -db swissprot -evalue 1e-5 -outfmt 6 -num_threads 8 > blastoutput.txt
+
+# Extract Uniprot id
+cat blastoutput.txt | cut -d$'\t' -f 2 | cut -d '.' -f 1 | uniq > uniprot.txt
+
+# download unitprot 
+while read p;
+do
+   echo $p
+   curl -O https://www.uniprot.org/uniprot/$p.fasta
+done <uniprot.txt
+cat *.fasta > allfasta.fa 
+clustalo -i allfasta.fa -o align.fa --threads=8
