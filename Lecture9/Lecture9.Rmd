@@ -1,0 +1,504 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+## R Notebook
+
+R 노트북 역시 Jypyter Notebook과 비슷한 느낌으로 코드와 설명을 동시에 작성할 수 있다.  
+Python에서는 변수에 어떤 숫자 등을 대입하는데 = 를 사용했지만,  
+R에는 변수에 어떤 숫자를 대입하는데 <- 를 사용한다.  
+```{r}
+a<-1
+a
+```
+
+역시 계산기와 같이 사용 가능하다. 
+```{r}
+a<-1+2+3
+b<-(100+200)^3
+10^2+30/4
+a
+b
+```
+## 벡터 (Vector)
+
+R에는 벡터 (Vector)라는 동시에 여러개의 자료를 저장할 수 있는 자료구조가 있다.  
+파이썬의 '리스트' 와 유사하다고 생각하면 된다.  
+
+```{r}
+a<-c(1,2,3,4)
+b<-c('this','is','the','cloud')
+c<-c('a','b','c','d')
+a
+b
+c
+```
+파이썬의 리스트와 마찬가지로 대괄호를 이용하여 부분적인 내용을 살펴볼 수 있다.  
+파이썬과는 다르게, R에서는 벡터의 제일 시작이 0 이 아닌 1로 시작되니 주의! 
+
+```{r}
+b[1:2]
+```
+
+다음과 같이 하면 연속적인 숫자로 벡터를 만들 수 있다. 
+```{r}
+Oneto100<-1:200
+Oneto100
+```
+일정 간격의 숫자로 벡터를 만들 수 있다. 
+
+seq(시작, 종료,간격)
+
+```{r}
+a <- seq(1,100,2)
+a
+```
+
+동일한 값을 반복해서 벡터를 만들 수 있다. 
+rep(채울 값, times=반복 횟수)
+
+
+```{r}
+data <- rep(1,times=10)
+data
+```
+벡터를 채울 값으로 벡터를 이용할 수도 있다. 
+c("a","b","c") 라는 벡터를 10회 반복한다. 
+
+```{r}
+rep <- rep(c("a","b","c"),times=10)
+rep 
+```
+벡터의 내용을 각각 10회 반복할 수도 있다.  
+벡터에 있는 내용들이 순서대로 지정된 횟수대로 반복된다. 
+
+```{r}
+rep <- rep(c("a","b","c"),each=10)
+rep
+```
+벡터와 벡터 간의 연산이 가능하다. 
+```{r}
+a <- c(1,2,3,4,5,6)
+b <- c(10,11,12,13,14,15)
+a+b
+```
+
+벡터에 들어 있는 숫자들을 계산 가능하다. 
+
+a에 1부터 100까지 증가하는 값을 채우고 
+sum() 함수로 합을 계산하면
+
+```{r}
+a<-1:100
+sum(a)
+```
+
+평균값 
+
+```{r}
+mean(a)
+```
+
+분산 
+```{r}
+var(a)
+```
+# 벡터를 이용한 벡터 위치값 알아오기 
+
+벡터의 값을 다른 벡터의 값을 이용하여 억세스할 수 있다. 
+일단 1부터 100까지의 값을 2씩 증가시켜 벡터에 채우고 
+
+```{r}
+a<-seq(1,100,2)
+a
+```
+
+여기서 1,5,10,20,30번째 값을 억세스하려면 어떻게 해야 하는가? 
+
+```{r}
+a[c(1,5,10,20,30)]
+```
+이런식으로도 표현 가능하다. 
+
+```{r}
+#1,5,10,20,30 번째 값을 취하기 위하여 이를 b라는 벡터에 넣고 
+b<-c(1,5,10,20,30)
+#b를 대괄호를 이용하여 벡터에 넣으면
+a[b]
+
+```
+
+### 연습문제 
+
+1부터 1000까지의 모든 홀수를 seq 으로 벡터 a 에 넣고 
+a의 합을 sum 함수로 계산하고, 
+평균을 mean 함수로 계산하자. 
+```{r}
+
+
+
+```
+# 행렬 
+
+R 에는 행렬을 표현할 수 있다. 
+1으로 채워진 2차원 행렬을 4x4로 만들자
+
+```{r}
+matrix <- matrix(rep(1,times=16),nrow= 4)
+matrix
+```
+여러개의 벡터를 이용하여 행렬을 만들 수 있다. 
+일단 벡터 a,b,c,d 에 다음과 같이 숫자를 입력하자. 
+
+rbind 는 여러 개의 벡터를 행 단위로 묶어서 행렬을 만든다. 
+a,b,c,d 를 새로운 행으로 하여 새롭게 행렬을 만든다. 
+```{r}
+a<-c(1,2,3,4)
+b<-c(1,1,1,1)
+c<-c(4,3,2,1)
+d<-c(4,5,2,3)
+
+matrix1<-rbind(a,b,c,d)
+matrix1
+
+```
+
+cbind 는 컬럼별로 묶는다.  
+
+```{r}
+matrix2<-cbind(a,b,c,d)
+matrix2
+```
+
+행렬의 항목은 다음과 같이 억세스 가능하다.
+
+```{r}
+matrix1
+#두번째 행
+matrix1[2,]
+#두번째 열 
+matrix1[,2]
+#세번째,네번째 열 
+matrix1[,3:4]
+#세번째, 네번째 행 
+matrix1[3:4,]
+#세번째 행, 네번째 열
+matrix1[3,4]
+```
+행렬을 재배열하고자 한다면?
+벡터와 마찬가지로 행을 지정할 때 벡터를 사용하여 재배열이 가능하다. 
+
+행을 1,2,4,3 의 순서로 재배열한다.
+```{r}
+matrix1[c(1,2,4,3),]
+```
+열을 4,3,2,1 로 재배열한다. 
+
+```{r}
+matrix1[,c(4,3,2,1)]
+```
+
+재배열된 행렬을 새로운 행렬로 저장해 보자. 
+
+```{r}
+newmatrix <- matrix1[,c(4,3,2,1)]
+newmatrix
+```
+
+# 패키지 설치와 사용  
+
+r 역시 파이썬과 마찬가지로 패키지 (packages) 라는 이름으로 여러가지 확장 기능을 제공하고 있다. 
+데이터 분석에 널리 사용되는 tidyverse라는 패키지를 설치해 보자. 
+
+https://www.tidyverse.org
+
+한글 자료는 아래를 참조 
+https://sulgik.github.io/r4ds/
+
+
+패키지는 한번만 설치하면, 업데이트가 필요하기 전에는 다시 설치할 필요가 없다. 
+
+```{r}
+install.packages("tidyverse")
+```
+
+라이브러리를 사용하기 전에는 library("라이브러리 이름")으로 라이브러리를 로딩해 준다. 
+
+```{r}
+library("tidyverse")
+```
+
+# Tibble
+
+Tibble 은 python의 pandas 데이터프레임과 비슷한 역할을 하는 테이블 형식의 자료 저장 구조이다.
+R에는 이외에도 data.frame 이라는 이름으로 데이터프레임 기능이 있으나, 본 강의에서는 Tibble 을 기준으로 설명해 본다. 
+
+Tibble 을 벡터로부터 만들어보자. 
+
+```{r}
+aa<-tibble(
+  aminoacid = c("Ala","Arg","Asn","Asp","Cys","Glu","Gln","Gly","His","Ile","Leu","Lys","Met","Phe","Pro","Ser","Thr","Trp","Tyr","Val"),
+  MW = c(89.1,174.2,132.1,133.1,121.2,147.1,146.2,75.1,155.2,131.2,131.2,146.2,149.2,165.2,115.1,105.1,119.1,204.2,181.2,117.1))
+aa
+```
+tibble의 각각의 열을 억세스해보자. 
+
+tibble이름$컬럼이름 으로 억세스가 가능하다. 
+
+```{r}
+aa$aminoacid
+aa$MW
+```
+
+혹은 이렇게 해도 된다. 
+```{r}
+aa[['MW']]
+```
+
+새로운 컬럼을 이렇게 추가한다. 
+```{r}
+aa[['OneLetter']] = c("A","R","N","D","C","E","Q","G","H","I","L","K","M","F","P","S","T","W","Y","V")
+aa
+```
+이제 데이터프레임의 내용을 조건에 따라서 필터링해보자. 
+MW가 100 이상인 아미노산만 표시하고 싶다면? 
+
+```{r}
+aa %>% filter(MW>100)
+```
+
+```{r}
+aa %>% select(aminoacid,MW)
+```
+이 결과에서 분자량 120 이상만 골라내고 싶으면? 
+
+```{r}
+aa %>% select(aminoacid,MW) %>%
+  filter(MW>120)
+```
+%>% 란 무엇인가? 
+%>% 는 왼쪽의 값을 오른쪽으로 보내라는 의미이다. 
+
+유닉스의 '파이프' 연산자를 생각하면 이해가 쉽다. 
+%>% 를 잘 이용하면 여러 가지 계산을 손쉽게 할 수 있다. 
+
+위의 계산 결과는 저장되지 않은 상태이다. 
+변수에 저장하여 다음 단계에서 사용하고 싶으면 
+
+대입 연산자 '<-' 를 이용하여 newdata 에 저장하게 된다. 
+```{r}
+newdata <- aa %>% select(aminoacid,MW) %>%
+  filter(MW>120)
+
+newdata
+```
+
+# 데이터 파일 읽기 
+
+이전 시간에 사용했던 데이터 파일을 불러와서 다른 분석을 진행해 보자. 
+7장에서 사용했던 타이타닉 데이터를 읽어보자. 
+
+이 파일은 콤마로 분리되어 있는 파일이고, 이 파일을 읽기 위해서는 read_csv(파일이름)을 이용한다. 
+만약 탭으로 분리되어 있는 파일이라면 read_tsv(파일이름) 을 사용해야 한다. 
+
+```{r}
+titanic <- read_csv('titanic.csv')
+titanic
+```
+여기서 남녀별로 평균 연령을 구하고 싶다면? 
+
+group_by(sex) 로 성별별로 그룹을 나누고,  
+summarise()로 그룹된 데이터에 대한 처리를 지정한다.
+
+age에 대해서 평균값 mean()을 계산하고, 
+fare에 대해서 평균값을 계산하여, 
+
+새로운 tibble 로 출력한다. 
+
+```{r}
+titanic %>% group_by(sex) %>%
+  summarise(
+  age = mean(age),
+  fare = mean(fare)
+  )
+```
+
+나이에 대해서는 계산이 되지 않았는데, NA 로 데이터 값이 없는 항목이 있었기 때문이다. 
+이를 제거하기 위해서는 다음과 같이 스크립트를 수정해 보자. 
+drop_na() 는 NA 값을 삭제하는 명령이다. 
+
+```{r}
+titanic %>% drop_na(age) %>%
+  group_by(sex) %>%
+  summarise(
+  age = mean(age),
+  fare = mean(fare)
+  )
+```
+group_by 를 성별과 여객 등급(class) 의 두가지 조건으로 분리할 수도 있다. 
+
+```{r}
+titanic %>% drop_na(age) %>%
+  group_by(sex,class) %>%
+  summarise(
+  age = mean(age),
+  fare = mean(fare)
+  )
+```
+alive 라는 컬럼에는 생존 여부가 되어 있다. 생존 여부에 따라서 계산을 해보자. 
+group_by f
+```{r}
+titanic %>% drop_na(age) %>%
+  group_by(alive,sex) %>%
+  summarize(
+    fare=mean(fare),
+    age=mean(age)
+  ) 
+```
+count() 를 이용하면 그룹된 항목의 갯수를 셀 수 있다. 
+```{r}
+titanic %>% drop_na(age) %>%
+  group_by(alive,sex) %>%
+  count()
+```
+간단한 그래프를 그려보자. 
+남녀 성별 분포를 
+```{r}
+titanic %>% drop_na(age) %>%
+   ggplot (aes(x=sex, y=age)) +
+   geom_boxplot()
+```
+```{r}
+titanic %>% drop_na(age) %>%
+   ggplot (aes(x=sex, y=age,fill=alive)) +
+   geom_boxplot()
+```
+
+```{r}
+titanic %>% drop_na(age) %>%
+   ggplot (aes(x=sex, y=age,fill=alive)) +
+   geom_boxplot()+
+   geom_jitter(position=position_jitterdodge(0.2),aes(colour=alive))
+```
+# 연습 
+
+'who' 라는 컬럼에는 탑승자의 신분을 '남자', '여자' ,'어린이' 로 구분하고 있다. 각각 신분별 생존자와 비생존자의 숫자는 어떻게 되는가?
+
+```{r}
+```
+x축을 who, y축을 fare, fill을 alive 로 하여 plot을 그려보자. 
+
+```{r}
+```
+# DepMap 데이터 다루기 
+
+다음에는 이전 시간에 알아보았던 DepMap 의 데이터를 다루어 보자. 
+R에는 DepMap 의 데이터를 쉽게 불러올 수 있는 depmap 이라는 패키지가 있다. 
+depmap 은 생명과학 분야에서 많이 사용하는 bioconductor 라는 R Packages중의 하나이다. 
+
+https://bioconductor.org/packages/release/data/experiment/vignettes/depmap/inst/doc/depmap.html
+
+이를 위해서는 다음의 두 개의 패키지르
+다음을 실행해서 패키지를 설치한다. 
+
+```{r}
+install.packages("BiocManager")
+BiocManager::install("depmap")
+```
+
+라이브러리를 불러온 후 
+
+```{r}
+library("depmap")
+library("ExperimentHub")
+```
+
+depmap 데이터를 불러올 준비를 한다. 
+```{r}
+eh <- ExperimentHub()
+query(eh, "depmap")
+```
+
+현재 불러올 수 있는 최신의 DepMap 데이터를 보여준다. 
+https://depmap.org/portal/download/
+위의 링크에 있는 내용과 동일하다. 
+
+우리는 최신의 전사체 데이터가 필요하므로 "EH5360" 이라는 데이터를 다운로드하여 불러온다. 
+어느 정도의 시간이 걸리므로 기다릴 것! 
+
+```{r}
+expression <- eh[["EH5360"]]
+```
+데이터가 다 불러왔으면 RStudio의 'Environment' 에서 expression 을 선택해서 데이터를 확인해 본다. 
+
+세포주에 대한 정보 데이터 (이전에 sample_info.csv 형식의 파일로 되어 있던 것) 도 불러온다. 
+```{r}
+metadata <-eh[["EH5362"]]
+```
+
+```{r}
+metadata
+```
+일단 세포주 데이터 중에서 혈액암 데이터만을 검색하자. 
+blood lineage 데이터만을 불러옴. 
+```{r}
+blood <- metadata %>% filter (lineage=='blood')
+blood
+```
+expression과 세포주 모두 'depmep_id' 에 세포 id 가 들어있다. 
+expression 데이터 중에서 우리가 필요한 혈액암 세포주 데이터에 해당하는 것만 
+python pandas의 merge 기능과 동일한 inner_join 으로 불러온다. 
+
+expression 의 데이터와 blood 의 데이터 중 공통적인 것을 depmap_id 를 기준으로 병합하고, 
+이 중에서 gene_name, stripped_cell_line_name, rna_expression 만 골라낸다. 
+
+```{r}
+ rna <- expression %>% inner_join(blood, by="depmap_id") %>%
+            select (gene_name, stripped_cell_line_name,rna_expression) 
+rna        
+```
+
+지금 현재의 데이터는 long form 의 데이터로 되어 있다. 
+이 대신 유전자 이름을 행, 세포주 이름을 열로 하는 데이터로 바꾸어 보자. 
+
+이를 바꾸기 위해서는 pivot_wider를 사용한다. 
+
+```{r}
+rnadata <- rna %>% pivot_wider(id_cols=gene_name,names_from=stripped_cell_line_name,values_from = rna_expression) 
+rnadata
+```
+이전에 파이썬에서 했던 것과 동일한 작업을 해 보자. 
+같은 유전자별로 분산을 구하고, 최대값 최상위 2000건을 추려 본다. 
+
+```{r}
+name <- rna %>%
+  group_by(gene_name) %>%
+  summarise(
+    var=var(rna_expression)) %>%
+  slice_max(order_by=var, n=2000) %>%
+  select (gene_name)
+name 
+```
+세포주 별로 발현의 분산이 제일 큰 2000개의 유전자 이름을 추출했다. 
+이 유전자의 발현을 추출해 본다. 
+```{r}
+extracted <- rnadata %>% inner_join(name, by="gene_name") %>%
+  column_to_rownames('gene_name')
+extracted
+```
+이전에 파이썬에서 한 것처럼 heatmap 을 그려 보자. 
+
+
+```{r}
+
+```
+pdf 로 저장하기 위해서는 다음의 스크립트를 이용하자. 
+
+```{r}
+data <-scale(extracted)
+pdf("heatmap.pdf", height=10, width=10)
+heatmap(data,scale="row")
+```
+
+
+
