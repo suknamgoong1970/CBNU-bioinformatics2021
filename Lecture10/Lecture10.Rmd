@@ -10,12 +10,6 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 BiocManager::install("edgeR")
-BiocManager::install("limma")
-BiocManager::install("mixOmics")
-```
-
-```{r}
-BiocManager::install("mixOmics")
 ```
 
 라이브러리를 로딩한다. 
@@ -23,14 +17,23 @@ BiocManager::install("mixOmics")
 ```{r}
 library(tidyverse)
 library(edgeR)
-library(mixOmics)
+library(data.table)
 ```
 
 
-일단 예제 데이터를 불러오자. 
+일단 예제 데이터를 불러오자.
+에제 데이터는 
+
 https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE49712
 
-에서 GSE49712_HTSeq.txt.gz 를 다운로드받아 압축을 풀고 작업 디렉토리에 옮길 것.  
+에서 GSE49712_HTSeq.txt.gz 를 다운로드받아 압축을 풀고 작업 디렉토리에 옮길 것
+
+
+이 데이터에는 두 가지 종류의 데이터가 있다. 
+Group A는 10종의 인간 세포주의 RNA를 동량으로 섞은 샘플을 5반복 (technical replicates) 수행한 것. 
+Group B는 인간 뇌의 여러 부분의 RNA를 혼합한 것을 5반복 (technical replicates) 수행한 것. 
+
+.  
 
 ```{r}
 sample <-read.table("GSE49712_HTSeq.txt",header=TRUE)
@@ -44,7 +47,8 @@ cleaned_sample <-sample[1:(nrow(sample)-5),]
 tail(cleaned_sample,5)
 ```
 
-제대로 발현되지 않는 유전자는 사전에 필터링하자. 
+제대로 발현되지 않는 유전자는 사전에 필터링하자.
+이를 위해서 유전자를 CPM으로 변환한다. 
 
 ```{r}
 countsPerMillion <- cpm(cleaned_sample)
@@ -54,17 +58,22 @@ summary(countsPerMillion)
 CPM이 2이 넘는지의 여부를 체크한다. 
 ```{r}
 countCheck <- countsPerMillion > 2
+countCheck
 ```
 
-CPM이 1이 넘는 데이터가 2개 이상 있는 행을 체크하여 행의 줄을 keep에 담고, 
+CPM이 2이 넘는 데이터가 3개 이상 있는 행을 체크하여 행의 줄을 keep에 담고, 
 ```{r}
 countCheck <- countsPerMillion > 2
+rowSums(countCheck)
 keep <- which(rowSums(countCheck) >= 3)
+
 filtered <- cleaned_sample[keep,]
+filtered
 summary(cpm(filtered))
 ```
 ```{r}
 countsPerMillion <- cpm(filtered)
+cor(countsPerMillion)
 heatmap(cor(countsPerMillion))
 ```
 Differential Expression을 위해서는 비교할 그룹 이름이 필요하다. 
@@ -92,37 +101,49 @@ dgList
 ```
 그룹간, 샘플간의 관계는 어떤가? 
 이를 위해서 MDS plot 을 그린다. 
-MDS plot 은 PCA analysis 처럼 그룹과 샘플간의 고나계를 볼 수 있다. 
+MDS plot 은 PCA analysis 처럼 그룹과 샘플간의 관계를 볼 수 있다. 
+그룹 A와 B가 잘 분리되어 있다는 것을 알 수 있다. 
 
 ```{r}
-
 plotMDS(dgList)
 ```
+
 ```{r}
 dgList <- estimateDisp(dgList)
 plotBCV(dgList)
 ```
-
+우리는 지금 하나의 조건만을 이용하므로, Fisher's Exact Test를 이용하여 검정을 수행한다. 
+logFC는 Fold Change의 log2, LogCPM은 average CPM (Count per Million의 Log)
 ```{r}
 dgeExactTest <- exactTest(dgList)
 dgeExactTest
 ```
-
+topTags을 이용하여 Top-Differentially Expressed Gene을 계산하자. 
 
 ```{r}
 resExactTest <- topTags(dgeExactTest, n = nrow(dgeExactTest$table))
-head(resExactTest$table)
-```
-```{r}
-resExactTest$table %>% filter (FDR<.001) 
+resExactTest$table
 ```
 
 ```{r}
-sum(resExactTest$table$FDR < .1)
-plotSmear(dgeExactTest, de.tags = rownames(resExactTest)[resExactTest$table$FDR < .001])
+FDR0 <- resExactTest$table %>% filter(FDR==0) 
+FDR0
+```
+
+```{r}
+sum(resExactTest$table$FDR==0)
+plotSmear(dgeExactTest, de.tags = rownames(resExactTest)[resExactTest$table$FDR == 0])
 abline(h = c(-2, 2), col = "blue")
 ```
-
+```{r}
+write_tsv(FDR0,'FDR.tsv')
+```
+```{r}
+gene <- rownames(resExactTest)[resExactTest$table$FDR == 0 & abs(resExactTest$table$logFC)>2]
+selected <- countsPerMillion[gene,]
+heatmap(selected)
+```
+TCGA 데이터로 추가적인 연습을 하자. 
 
 ```{r}
 library(edgeR)
