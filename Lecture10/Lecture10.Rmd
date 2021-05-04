@@ -3,45 +3,7 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
-
-```{r}
-library("tidyverse")
-brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
-brca_normal <-read_tsv("brca-rsem-count-tcga.txt")
-```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
-```{r}
-cancer <- colnames(brca_cancer)[3:length(colnames(brca_cancer))]
-normal <- colnames(brca_normal)[3:length(colnames(brca_normal))]
-
-samplelist <- tibble (
-             sample = cancer,
-             condition="T"
-)
-normalist <- tibble (
-             sample = normal,
-             condition = "C"
-)
-
-sample<-bind_rows(samplelist,normalist)
-
-```
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
-```{r}
-count<-brca_cancer %>% inner_join (brca_normal, by="Hugo_Symbol") %>%
-          select(-c("Entrez_Gene_Id.x","Entrez_Gene_Id.y")) %>%
-          column_to_rownames('Hugo_Symbol')
-
-
-```
-
+Differential expression분석을 위해서는 일단 다음 패키치를 설치한다. 
 
 ```{r}
 if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -49,8 +11,118 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 
 BiocManager::install("edgeR")
 BiocManager::install("limma")
-BiocManager::install("HTSFilter")
+BiocManager::install("mixOmics")
 ```
+
+```{r}
+BiocManager::install("mixOmics")
+```
+
+라이브러리를 로딩한다. 
+
+```{r}
+library(tidyverse)
+library(edgeR)
+library(mixOmics)
+```
+
+
+일단 예제 데이터를 불러오자. 
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE49712
+
+에서 GSE49712_HTSeq.txt.gz 를 다운로드받아 압축을 풀고 작업 디렉토리에 옮길 것.  
+
+```{r}
+sample <-read.table("GSE49712_HTSeq.txt",header=TRUE)
+tail(sample,10)
+```
+끝에 불필요한 데이터가 5줄 있으므로 이를 제거한다.
+처음부터 끝의 5줄을 뺀 내용을 저장한 후 다시 cleaned_sample에 넣는다. 
+
+```{r}
+cleaned_sample <-sample[1:(nrow(sample)-5),]
+tail(cleaned_sample,5)
+```
+
+제대로 발현되지 않는 유전자는 사전에 필터링하자. 
+
+```{r}
+countsPerMillion <- cpm(cleaned_sample)
+summary(countsPerMillion)
+```
+
+CPM이 2이 넘는지의 여부를 체크한다. 
+```{r}
+countCheck <- countsPerMillion > 2
+```
+
+CPM이 1이 넘는 데이터가 2개 이상 있는 행을 체크하여 행의 줄을 keep에 담고, 
+```{r}
+countCheck <- countsPerMillion > 2
+keep <- which(rowSums(countCheck) >= 3)
+filtered <- cleaned_sample[keep,]
+summary(cpm(filtered))
+```
+```{r}
+countsPerMillion <- cpm(filtered)
+heatmap(cor(countsPerMillion))
+```
+Differential Expression을 위해서는 비교할 그룹 이름이 필요하다. 
+A_1, A_2, A_3...은 그룹 A
+B_1, B_2, B_3...은 그룹 B이다. 
+
+컬럼 이름의 A, B만을 추출하여 이것으로 그룹 이름을 만들자. 
+```{r}
+colnames(filtered)
+group<-substr(colnames(filtered),1,1)
+group
+```
+
+
+
+```{r}
+dgList <- DGEList (count=filtered, group = group)
+dgList
+```
+
+각각의 샘플간의 절대량을 보정하기 위하여 노멀라이즈를 한다.
+```{r}
+dgList <- calcNormFactors(dgList, method="TMM")
+dgList
+```
+그룹간, 샘플간의 관계는 어떤가? 
+이를 위해서 MDS plot 을 그린다. 
+MDS plot 은 PCA analysis 처럼 그룹과 샘플간의 고나계를 볼 수 있다. 
+
+```{r}
+
+plotMDS(dgList)
+```
+```{r}
+dgList <- estimateDisp(dgList)
+plotBCV(dgList)
+```
+
+```{r}
+dgeExactTest <- exactTest(dgList)
+dgeExactTest
+```
+
+
+```{r}
+resExactTest <- topTags(dgeExactTest, n = nrow(dgeExactTest$table))
+head(resExactTest$table)
+```
+```{r}
+resExactTest$table %>% filter (FDR<.001) 
+```
+
+```{r}
+sum(resExactTest$table$FDR < .1)
+plotSmear(dgeExactTest, de.tags = rownames(resExactTest)[resExactTest$table$FDR < .001])
+abline(h = c(-2, 2), col = "blue")
+```
+
 
 ```{r}
 library(edgeR)
@@ -61,5 +133,248 @@ library(HTSFilter)
 ```{r}
 library(data.table)
 dgeFull <- DGEList(as.matrix(count),group=sample$condition)
+countsPerMillion <- cpm(dgeFull)
+countCheck <- countsPerMillion >1
+keep <- which (rowSums(countCheck)>=2)
+dgeFull<-dgeFull[keep,]
+```
+
+```{r}
+dgeFull <- calcNormFactors(dgeFull, method="TMM")
+```
+
+```{r}
+plotMDS(dgeFull)
+```
+```{r}
+BRCA_clinical <- read_tsv('BRCA_clinicalMatrix.dms')
+BRCA_clinical
+```
+```{r}
+
+```
+
+```{r}
+cancersample <- tibble (
+sampleid = cancer,
+sampleid2 = str_sub(cancer,1,15) 
+)
+
+Negative <- BRCA_clinical %>% filter (HER2_Final_Status_nature2012=='Negative') %>%
+            select ('sampleID', 'HER2_Final_Status_nature2012') %>%
+            inner_join(cancersample, by=c("sampleID"="sampleid2"))
+Negativecount <- count %>% select(Negative$sampleid)
+
+Positive <- BRCA_clinical %>% filter (HER2_Final_Status_nature2012=='Positive') %>%
+            select ('sampleID', 'HER2_Final_Status_nature2012') %>%
+            inner_join(cancersample, by=c("sampleID"="sampleid2"))
+
+
+Positivecount <- count %>% select(Positive$sampleid)
+Positivecount
+
+```
+
+```{r}
+brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
+```
+```{r}
+brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
+brca_normal <-read_tsv("brca-rsem-count-tcga.txt")
+cancer <- colnames(brca_cancer)[3:length(colnames(brca_cancer))]
+normal <- colnames(brca_normal)[3:length(colnames(brca_normal))]
+samplelist <- tibble (
+             sample = cancer,
+             condition="T"
+)
+normalist <- tibble (
+             sample = normal,
+             condition = "C"
+)
+
+
+
+```
+
+```{r}
+normalist$patient <- substr(normalist$sample,1,12)
+normalist
+```
+```{r}
+samplelist$patient <- substr(samplelist$sample,1,12)
+paired <- samplelist %>% inner_join (normalist, by='patient')
+
+brca_cancer_paired <- brca_cancer %>% select (paired$sample.x)
+brca_normal_paired <- brca_normal %>% select (paired$sample.y)
+count<-bind_cols(brca_cancer_paired,brca_normal_paired)
+count <- count %>% mutate (Hugo_Symbol=brca_cancer$Hugo_Symbol) %>%
+          column_to_rownames('Hugo_Symbol')
+paired
+```
+```{r}
+countsPerMillion <- cpm(count)
+summary(countsPerMillion)
+```
+
+```{r}
+countCheck <- countsPerMillion > 2
+keep <- which(rowSums(countCheck) >= 3)
+filtered <- count[keep,]
+summary(cpm(filtered))
+```
+
+```{r}
+countsPerMillion <- cpm(filtered)
+heatmap(cor(countsPerMillion))
+```
+
+```{r}
+sample = read_tsv('BRCA_clinicalMatrix.dms')
+her2positive = sample %>% filter(HER2_Final_Status_nature2012=='Positive') %>%
+          select(sampleID) %>%
+          mutate(patientID = substr(sampleID,1,12))
+her2positive
+  
+```
+
+```{r}
+brca_normal <-read_tsv("brca-rsem-count-tcga.txt")
+normal <- colnames(brca_normal)[3:length(colnames(brca_normal))]
+normalist <- tibble (
+             sample = normal,
+             condition = "C"
+)
+
+```
+```{r}
+normalist$patient = substr(normalist$sample,1,12)
+her2people <- her2positive %>% inner_join(normalist, by=c("patientID"="patient"))
+her2people
+```
+
+
+```{r}
+brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
+cancer <- colnames(brca_cancer)[3:length(colnames(brca_cancer))]
+samplelist <- tibble (
+             sample = cancer,
+             condition="T"
+)
+
+```
+
+```{r}
+samplelist$patient = substr(samplelist$sample,1,12)
+cancernormal <- her2people %>% inner_join(samplelist, by=c("patientID"="patient"))
+cancernormal
+```
+
+```{r}
+normalcount <- brca_normal %>% select(cancernormal$sample.x)
+cancercount <- brca_cancer %>% select(cancernormal$sample.y)
+```
+
+```{r}
+count <- bind_cols(normalcount,cancercount)
+count$id <- brca_normal$Hugo_Symbol
+count <- column_to_rownames (count, var="id")
+count
+```
+```{r}
+
+norm <- tibble (sample = cancernormal$sample.x,
+        treatment ="C",
+        patient = cancernormal$patientID,
+)
+
+
+cancer <- tibble (sample = cancernormal$sample.y,
+        treatment ="T",
+        patient = cancernormal$patientID,
+)
+
+sample = bind_rows(norm,cancer)
+
+```
+
+
+```{r}
+countsPerMillion <- cpm(count)
+summary(countsPerMillion)
+
+```
+
+```{r}
+countCheck <- countsPerMillion > 2
+```
+
+CPM이 1이 넘는 데이터가 2개 이상 있는 행을 체크하여 행의 줄을 keep에 담고, 
+```{r}
+countCheck <- countsPerMillion > 2
+keep <- which(rowSums(countCheck) >= 3)
+filtered <- count[keep,]
+summary(cpm(filtered))
+countsPerMillion <- cpm(filtered)
+heatmap(cor(countsPerMillion))
+```
+```{r}
+dgeFull <- DGEList(as.matrix(filtered),group=sample$treatment)
+dgeFull <- calcNormFactors(dgeFull,method="TMM")
+```
+
+```{r}
+dgeFull$samples
+```
+```{r}
+plotMDS(dgeFull)
+```
+```{r}
+design.matrix <- model.matrix(~sample$treatment+sample$patient)
+dgeFull <- estimateDisp(dgeFull, design.matrix)
+```
+
+```{r}
+plotBCV(dgeFull)
+```
+```{r}
+fit <- glmFit(dgeFull, design.matrix)
+fit
+```
+
+```{r}
+design.matrix
+```
+
+```{r}
+dgeLRTtest <- glmLRT(fit, coef = 2)
+tag <- topTags(dgeLRTtest, n = nrow(dgeLRTtest$table))
+tag$table %>% filter (FDR < .05)
+
+plotSmear(dgeLRTtest, de.tags = rownames(tag)[tag$table$FDR <.0001])
+abline(h = c(-2, 2), col = "blue")
+```
+
+```{r}
+volcano <- cbind(tag$table$logFC,-log10(tag$table$FDR))
+colnames(volcano) <- c("logFC","negLogPval")
+head(volcano)
+```
+
+```{r}
+plot(volcano, pch=19)
+```
+
+```{r}
+gene <- rownames(tag)[tag$table$FDR <.0001 & abs(tag$table$logFC)>2]
+```
+
+```{r}
+CPM <- cpm(filtered,log=TRUE)
+CPM_selected <- CPM[gene,]
+```
+
+
+```{r}
+heatmap(CPM_selected)
 ```
 
