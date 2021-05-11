@@ -1,0 +1,379 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Kallisto 설치 
+
+다음 링크에서 Kallisto를 다운받는다. 
+
+https://pachterlab.github.io/kallisto/download.html
+
+최신 버전의 실행 파일은 여기 존재한다. 
+
+- Mac   
+https://github.com/pachterlab/kallisto/releases/download/v0.46.1/kallisto_mac-v0.46.1.tar.gz  
+- Windows  
+https://github.com/pachterlab/kallisto/releases/download/v0.46.1/kallisto_windows-v0.46.1.zip  
+- Linux   
+https://github.com/pachterlab/kallisto/releases/download/v0.46.1/kallisto_linux-v0.46.1.tar.gz  
+
+압축을 풀고 실행파일을 kallisto 라는 디렉토리에 저장한다. 
+
+## SRA-Toolkit 설치
+
+NCBI의 SRA에서 파일을 다운로드받으려면 SRA-Toolkit의 설치가 필요하다. 
+
+https://github.com/ncbi/sra-tools/wiki/02.-Installing-SRA-Toolkit  
+http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-win64.zip  
+http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz  
+http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-centos_linux64.tar.gz  
+http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-mac64.tar.gz  
+
+  
+유닉스 계열 운영체제면 .bashrc 혹은 .zshrc에 패스를 설정하고   
+
+>export SRATOOL=/Users/suknamgoong/sratoolkit/sratoolkit.2.11.0-mac64/bin  
+>export KALLISTO=/Users/suknamgoong/kallisto  
+>export PATH=$SRATOOL:$KALLISTO::$PATH   
+
+윈도우 계열 운영체제면 3강에서 배운 것처럼 고급 시스템 설정 보기 - 환경 변수 - 시스템 변수 - Path 에서 kallisto 및 SRA Toolkit 의 실행파일 위치를 설정하자. 
+
+
+## 예제 데이터 다운로드 
+
+https://www.ncbi.nlm.nih.gov/sra?term=SRP252836
+
+Arabidopsis Thaliana 의 잎에 H2O2, water, Nacl, H2O2+NaCl 을 친 후 Transcriptome의 변화를 3반복을 수행함.
+
+Control 
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308184/SRR11308184.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-19/SRR11308187/SRR11308187.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308188/SRR11308188.1  
+
+H2O2
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-19/SRR11308178/SRR11308178.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-19/SRR11308179/SRR11308179.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-19/SRR11308180/SRR11308180.1  
+
+NaCl
+
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308181/SRR11308181.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308182/SRR11308182.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-20/SRR11308183/SRR11308183.1  
+
+H2O2+NaCl  
+
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-20/SRR11308177/SRR11308177.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308185/SRR11308185.1  
+https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos3/sra-pub-run-21/SRR11308186/SRR11308186.1  
+
+수업자료와 함께 들어있는 'download.sh' 라는 스크립트를 실행시키면 현재 디렉토리에 파일을 다운로드받을 수 있다. 
+
+
+
+## 데이터 변환
+
+SRA 파일을 다운로드 받은 뒤에는 이를 FASTq 형식의 파일로 변환하여야 한다. 
+SRA-Toolkit가 설치되어 있는 상황에서는 다음과 같은 명령으로 파일을 FASTq 형식의 파일로 변환할 수 있다.  
+
+
+>fasterq-dump SRR11308177.1 --split-files --threads 16
+
+--threads는 자신의 컴퓨터의 코어 숫자에 맞추어서 조절하자. 
+
+명령을 내리면 SRR11308177.1_1.fastq와 SRR11308177.1_2.fastq의 파일이 생성된다.  
+이 파일의 처음 부분을 살펴보면..
+
+>head SRR11308177_1.fastq
+
+```
+@SRR11308177.1 1 length=150
+AATAGCCACATATTTCATGGAAAATCTCAGTTCATCAAAGGCCCAAAAAAGAACAAGTGCTAAAGCTGAACCACTACCTTTAGGCGATTAAGCTGCTGCACGTGGCTGGAGACCTCTAAGAGGGTTGAAGATAACACAGTCAATACGTCA
++SRR11308177.1 1 length=150
+A-AAA-AFFJJ-A<FJJFJJFAJJJJJ-FJFFJ<J-FF<F-J<<FAJFJ<JJFF7FFJAJAFFAA-FJAFJJJ-<--AJFF<JJAJJFAAJF7F-FJF-A7FJJJ<77A-7<-7--7AAAAAF<---7-7777--A--7A---7A--7AF
+@SRR11308177.2 2 length=150
+GATGAGTTTGGAATTGGTACTCTTCGTTTGACCACAAGGCAGACGTTTCAGCTTCATGGTATTCTGAAGCAGAATCTTAAGACTGTGATGAGCTCGATTATTAAAAATATGGTGAGCACGCTTGGTGCATGTGGTGATGTAACGAGATAC
++SRR11308177.2 2 length=150
+AAFAAA-<FAJ<FJJJJJFAJAFJFJJJFFFJ7JJFFJJF-FJJJJJJJ<J<FJ-FJJJF-<F-<F--FJFJJAA7AJJFF<AJ<AJJFAJJF<-JJ7FA--JJF<FJJJJJA-F<-7--7FJAFF--77A7----A----77-A---7-
+@SRR11308177.3 3 length=150
+CTTGAGTCTCAGTATCAATGTCATGTTTAATGCGCTGAGATTCTGAGAACATGTATGCCTTTTGACTGATGGTCTTCATTACATTTGCATACAGTTTTACGGCAGCTGGGTACTATGGATGAGGGGTGATCTTTTACTTACTAAGAATAC
+```
+
+이 데이터 내의 시퀀스 갯수는? 
+>grep "@SRR11308177" SRR11308177_1.fastq | wc -l
+```
+5360140
+```
+
+약 260만 reads가 들어있음. 
+
+동일한 방법으로 모든 SRR...파일을 fastaq로 변환하자. 
+
+>fasterq-dump SRR11308178.1 --split-files --threads 16  
+>fasterq-dump SRR11308179.1 --split-files --threads 16  
+>....  
+
+
+## Transcriptome Index 만들기 
+
+Kallisto는 STAR등의 aligner와는 달리 Transcriptome에 직접 RNA-Seq Read를 매핑한다. (Pseudoalignments)  
+따라서 Genome Sequence 대신 Transcriptome 을 이용하여 Index를 만들어야 한다.  
+
+Arabidopsis의 모든 RNA가 있는 fasta 파일을 다운로드받자.
+
+https://ics.hutton.ac.uk/atRTD/   
+https://ics.hutton.ac.uk/atRTD/RTD2/AtRTD2_19April2016.fa
+
+
+하위 디렉토리에 TAIR10 이라는 디렉토리를 만들고 이 파일을 이동한다. 
+
+TAIR10 이라는 디렉토리 내에서 다음 명령으로 kallisto index 를 만든다. 
+
+kallisto index AtRTD2_19April2016.fa -i TAIR10
+
+인덱스가 정상적으로 만들어진 다음에는 다음과 같이 TAIR10 이라는 이름으로 인덱스가 형성되어 있다. 
+
+❯ ls -l
+total 2712048
+-rw-r--r--  1 suknamgoong  staff   157863805  5 11 12:48 AtRTD2_19April2016.fa
+-rw-r--r--  1 suknamgoong  staff  1219967392  5 11 12:55 TAIR10
+
+
+## Kallisto Run 
+
+인덱스를 다 만든 다음에는 Kallisto 를 실행하여 quantification을 수행한다. 
+
+kallisto quantification은 다음과 같은 명령으로 수행한다. 
+
+>kallisto quant -i <인덱스 이름> -o <결과저장 디렉토리 이름> -b <bootstrap number> <두 개의 fastq 데이터>
+
+kallisto quant -i ./TAIR10/TAIR10 -o quant8178 -b 5 SRR11308178.1_1.fastq SRR11308178.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8179 -b 5 SRR11308179.1_1.fastq SRR11308179.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8180 -b 5 SRR11308180.1_1.fastq SRR11308180.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8181 -b 5 SRR11308181.1_1.fastq SRR11308181.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8182 -b 5 SRR11308182.1_1.fastq SRR11308182.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8183 -b 5 SRR11308183.1_1.fastq SRR11308183.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8184 -b 5 SRR11308184.1_1.fastq SRR11308184.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8185 -b 5 SRR11308185.1_1.fastq SRR11308185.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8186 -b 5 SRR11308186.1_1.fastq SRR11308186.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8187 -b 5 SRR11308187.1_1.fastq SRR11308187.1_2.fastq  
+kallisto quant -i ./TAIR10/TAIR10 -o quant8188 -b 5 SRR11308188.1_1.fastq SRR11308188.1_2.fastq  
+
+
+정상적으로 정량이 되었으면 
+❯ cd quant8177
+❯ ls
+abundance.h5  abundance.tsv run_info.json
+
+과 같은 파일이 형성된다. 
+
+
+## Sample 데이터 파일 만들기 
+
+텍스트 에디터에서 다음과 같은 파일을 준비한다. (sample.txt)
+
+sample,condition,path
+SRR11308188,Control,./quant8188
+SRR11308187,Control,./quant8187
+SRR11308184,Control,./quant8184
+SRR11308181,NaCl,./quant8181
+SRR11308182,NaCl,./quant8182
+SRR11308183,NaCl,./quant8183
+SRR11308178,H2O2,./quant8178
+SRR11308179,H2O2,./quant8179
+SRR11308180,H2O2,./quant8180
+SRR11308177,NaClH2O2,./quant8177
+SRR11308185,NaClH2O2,./quant8185
+SRR11308186,NaClH2O2,./quant8186
+
+sample,condition,path
+고유한 샘플이름, 조건, 파일의 위치 
+
+
+kallisto 실행이 끝나고 준비가 끝나면 R에서 분석 준비를 한다. 
+다음 패키지를 설치한다. 
+
+```{r}
+#만약 Bioconductor를 이전 시간에 설치하지 않았다면 설치한다. 
+#install.packages("BiocManager")
+BiocManager::install(c("rhdf5"))
+install.packages("devtools")
+devtools::install_github("pachterlab/sleuth")
+install.packages("writexl")
+```
+
+
+패키지 설치가 끝났으면 다음 패키지를 불러들여온다. 
+```{r}
+library(tidyverse)
+library(biomaRt)
+library(sleuth)
+library(writexl)
+```
+
+Kallisto는 transcript 단위로 정량을 수행하는데, 이것을 유전자 단위로 환산하기 위해서는, 
+gene과 transcript 사이의 관계가 있는 정보가 필요하다. 
+이를 만드는 방법은 여러가지가 있지만, 우리가 사용한 reference transcriptome 의 fasta file에서 추출해보자. 
+
+cd tair
+grep ">" AtRTD2_19April2016.fa > transcript_gene.txt
+head transcript_gene.txt
+>AT1G01010.1 gene=AT1G01010 CDS=130-1419
+>AT1G01020_P2 gene=AT1G01020 CDS=72-647
+>AT1G01020_P6 gene=AT1G01020 CDS=190-504
+>AT1G01020_P1 gene=AT1G01020 CDS=465-1202
+>AT1G01020_P3 gene=AT1G01020 CDS=583-1293
+>AT1G01020_P4 gene=AT1G01020 CDS=560-1270
+>AT1G01020_P5 gene=AT1G01020 CDS=583-1179
+>AT1G01030.1 gene=AT1G01030 CDS=614-1690
+>AT1G01030_P2 gene=AT1G01030 CDS=614-1621
+>AT1G01030_ID1 gene=AT1G01030
+
+제일 앞에 있는 정보가 transcript id이고 gene=뒤에 있는 내용이 유전자 내용이다. 
+이를 r에서 읽어서 변환해 보자. 
+
+
+
+```{r}
+#>AT1G01010.1 gene=AT1G01010 CDS=130-1419 와 같은 형식으로 된 컬럼을 공백으로 분리하여 각각 'transcript', 'gene' 'CDS'에 저장한 후 
+At <- read_tsv('transcript_gene.txt', col_names = FALSE)
+At
+genetranscript <- At %>% separate(X1,sep=' ',into=c('transcript','gene','CDS')) %>%
+       #target_id와 gene 이라는 컬럼에 저장한다. 
+       mutate (target_id = str_replace(transcript,">","")) %>%
+       mutate (ens_gene = str_replace(gene,"gene=","")) %>%
+       select (target_id,ens_gene)
+#transcript와 유전자와의 관계가 저장되어 있다. 
+genetranscript
+```
+
+
+
+Biomart (https://www.ensembl.org/biomart/martview/47c4265440eae4e7a71296f79388a105)를 이용하여 유전자의 이름과 transcript 등에 대한 정보를 불러온다.
+식물의 경우에서는 plants.ensembl.org 를 이용한다. 
+https://plants.ensembl.org/biomart/martview/efe6297e540ca1fbd8d1000f81801a3c
+
+
+원래는 biomaRT 라는 모듈을 이용하여 자동적으로 R에서 다운받을 수 있으나, 접속 문제가 있어서 
+그 경우를 대비하여 수동으로 다운로드한 데이터를 준비했다. 
+
+```{r}
+genename<-read_tsv('mart_export.txt') %>%
+          select('TAIR ID', 'Transcript stable ID', 'TAIR Gene Name ID') %>%
+          rename ('gene'='TAIR ID', 'target_id'='Transcript stable ID', 'ext_gene'='TAIR Gene Name ID')  %>%
+          distinct(gene,.keep_all = TRUE)
+genename
+```
+
+
+유전자 약칭을 transcript와 유전자 이름에 붙인다. 
+```{r}
+ttg<-genetranscript %>% inner_join (genename, by=c(`ens_gene`="gene")) %>%
+              select (target_id.x,ens_gene,ext_gene) %>%
+              rename(target_id = target_id.x)
+ttg
+```
+
+샘플 정보를 읽는다. 
+
+```{r}
+library(sleuth)
+
+s2c <- read_csv('sample.txt')
+#유전자와 transcript 관계를 정의해 놓은 ttg와, 유전자 이름을 정의해 놓은 컬럼 (ens_gene) 이름을 지정한다. 
+
+so <- sleuth_prep(s2c,extra_bootstrap_summary=TRUE, target_mapping=ttg, aggregation_column='ens_gene')
+```
+kallisto_table에서 읽어들인 데이터의 값을 볼 수 있다. 
+
+```{r}
+kallistotable <-kallisto_table(so)
+kallistotable
+```
+샘플의 Q/C를 수행한다. 
+다음 명령으로 샘플의 PCA plot을 그릴 수 있다. 
+```{r}
+plot_pca(so,color_by='condition')
+```
+Control과 NaCl, NaCl+H2O2 는 잘 구분이 되는 반면, NaCl과 H2O2 는 잘 구분이 되지 않는듯 하다.  
+샘플간 heatmap을 그려 보자. 
+각각의 처리군간의 트랜스크립톰과의 차이를 찾아보자.  
+
+```{r}
+plot_sample_heatmap(so)
+```
+
+이제 조건에 대해서 다르게 발현되는 유전자를 찾아본다. 
+일단 transcript 단위로 결과를 계산하자. 
+
+```{r}
+so <- sleuth_fit(so, ~condition, 'full')
+so <- sleuth_fit(so, ~1, 'reduced')
+so <- sleuth_lrt(so, 'reduced', 'full')
+sleuth_table_t <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE, pval_aggregate = FALSE)
+sleuth_table_t
+```
+
+```{r}
+sleuth_table %>% filter (qval<0.005)
+```
+가장 차이가 있는 것들을 확인해 보자. 
+
+```{r}
+plot_bootstrap(so, "AT3G15356_P1", units = "est_counts", color_by = "condition")
+```
+Control, H2O2 에서 과발현되나, NaCl, NaCl+H2O2 에서 적게 발현되는 유전자들이다. 
+
+```{r}
+plot_bootstrap(so, "AT5G24770_c1", units = "est_counts", color_by = "condition")
+```
+이제 transcript 단위가 아닌 유전자 단위로 과발현되는 유전자를 찾아보자. 
+transcript 단위의 결과를 종합하여 유전자 단위로 differentiallyt expressed 된 유전자를 찾는다. 
+
+
+```{r}
+so <- sleuth_fit(so, ~condition, 'full')
+so <- sleuth_fit(so, ~1, 'reduced')
+so <- sleuth_lrt(so, 'reduced', 'full')
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_table %>% filter (qval<0.005)
+```
+```{r}
+sleuth_table_t %>% filter (ens_gene=='AT1G54100')
+```
+
+```{r}
+plot_bootstrap(so, "AT1G54100_JC2", units = "est_counts", color_by = "condition")
+plot_bootstrap(so, "AT1G54100_P2", units = "est_counts", color_by = "condition")
+plot_bootstrap(so, "AT1G54100_P1", units = "est_counts", color_by = "condition")
+```
+
+```{r}
+plot_transcript_heatmap(so,c("AT1G54100_JC2","AT1G54100_P2","AT1G54100_P1"))
+```
+가장 differential expression이 되는 1000개의 유전자의 expression 값을 매트릭스로 만들자.
+
+```{r}
+datamatrix <- sleuth_table_t[1:1000,] %>% inner_join (kallistotable, by='target_id') %>%
+  select (target_id, ens_gene, sample,tpm ) %>%
+  pivot_wider(id_cols=target_id, names_from=sample,values_from=tpm) %>%
+  column_to_rownames('target_id')
+datamatrix
+```
+
+```{r}
+hU <- heatmap (as.matrix(datamatrix))
+```
+```{r}
+library(writexl)
+newmatrix <- as.matrix(datamatrix)
+d<-datamatrix[hU$rowInd,]
+dd<-d[,hU$colInd]
+ddd <- dd %>% rownames_to_column('transcript_id')
+
+ddd <- ddd %>% inner_join (ttg,by=c("transcript_id"="target_id"))
+
+write_xlsx(ddd,'transcript.xlsx')
+```
+
