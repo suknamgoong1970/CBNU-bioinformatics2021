@@ -243,7 +243,6 @@ genetranscript <- At %>% separate(X1,sep=' ',into=c('transcript','gene','CDS')) 
        #target_id와 gene 이라는 컬럼에 저장한다. 
        mutate (target_id = str_replace(transcript,">","")) %>%
        mutate (ens_gene = str_replace(gene,"gene=","")) %>%
-       select (target_id,ens_gene)
 #transcript와 유전자와의 관계가 저장되어 있다. 
 genetranscript
 ```
