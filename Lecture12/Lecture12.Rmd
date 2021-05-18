@@ -1,0 +1,361 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+10장에서 수행한 TCGA 의 유방암 환자 데이터와 환자의 정상조직 데이터 중에서 
+HER2 상태가 positive한 사람을 골라서 DE를 수행한다. 
+
+```{r}
+library(tidyverse)
+library(edgeR)
+
+#유방암 환자 데이터 읽기 
+sample = read_tsv('BRCA_clinicalMatrix.dms')
+#이 중 HER2 상태가 positive인 사람을 골라서 
+her2positive = sample %>% filter(HER2_Final_Status_nature2012=='Positive') %>%
+          dplyr::select(sampleID) %>%
+          mutate(patientID = substr(sampleID,1,12))
+
+#정상 조직의 시퀀싱 데이터 읽기 
+brca_normal <-read_tsv("brca-rsem-count-tcga.txt")
+normal <- colnames(brca_normal)[3:length(colnames(brca_normal))]
+normalist <- tibble (
+             sample = normal,
+             condition = "C"
+)
+
+normalist$patient = substr(normalist$sample,1,12)
+her2people <- her2positive %>% inner_join(normalist, by=c("patientID"="patient"))
+
+brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
+cancer <- colnames(brca_cancer)[3:length(colnames(brca_cancer))]
+samplelist <- tibble (
+             sample = cancer,
+             condition="T"
+)
+
+samplelist$patient = substr(samplelist$sample,1,12)
+cancernormal <- her2people %>% inner_join(samplelist, by=c("patientID"="patient"))
+
+# 정상인과 암환자 샘플 중에서 선택된 샘플만을 추려낸다. 
+normalcount <- brca_normal %>% select(cancernormal$sample.x)
+cancercount <- brca_cancer %>% select(cancernormal$sample.y)
+
+count <- bind_cols(normalcount,cancercount)
+count$id <- brca_normal$Hugo_Symbol
+count <- column_to_rownames (count, var="id")
+norm <- tibble (sample = cancernormal$sample.x,
+        treatment ="C",
+        patient = cancernormal$patientID,
+)
+
+cancer <- tibble (sample = cancernormal$sample.y,
+        treatment ="T",
+        patient = cancernormal$patientID,
+)
+
+sample = bind_rows(norm,cancer)
+countsPerMillion <- cpm(count)
+summary(countsPerMillion)
+countCheck <- countsPerMillion > 2
+
+#CPM이 1이 넘는 데이터가 2개 이상 있는 행을 체크하여 행의 줄을 keep에 담고, 
+
+keep <- which(rowSums(countCheck) >= 3)
+filtered <- count[keep,]
+summary(cpm(filtered))
+countsPerMillion <- cpm(filtered)
+heatmap(cor(countsPerMillion))
+dgeFull <- DGEList(as.matrix(filtered),group=sample$treatment)
+dgeFull <- calcNormFactors(dgeFull,method="TMM")
+plotMDS(dgeFull)
+design.matrix <- model.matrix(~sample$treatment+sample$patient)
+dgeFull <- estimateDisp(dgeFull, design.matrix)
+plotBCV(dgeFull)
+fit <- glmFit(dgeFull, design.matrix)
+dgeLRTtest <- glmLRT(fit, coef = 2)
+
+#DE 결과를 tag 이라는 데이터프레임에 담는다. 
+tag <- topTags(dgeLRTtest, n = nrow(dgeLRTtest$table))
+```
+
+GO annotation에 필요한 두 가지 패키지를 설치한다. 
+goseq과 org.Hs.eg.db이다. 
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("goseq")
+BiocManager::install("org.Hs.eg.db")
+```
+
+```{r}
+library(goseq)
+```
+
+사용 가능한 생물은? 
+```{r}
+org<-supportedOrganisms()
+org
+```
+데이터를 준비한다. 
+
+goseq에서 요구되는 데이터는 전체 유전자에서 differential expression 이 된 유전자를 1로, differential expression 이 되지 않은 유전자를 0 으로 표시한 named vector이다. 
+
+조건은 FDR 기준으로 .05 보다 작고, logFC가 1.5 보다 큰 유전자들이다. 
+
+```{r}
+#FDR 이 0.05보다 작고, logFC가 1.5보다 큰 유전자를 1로, 그렇지 않은 유전자를 0 으로 만든다. 
+genes <- as.integer(tag$table$FDR < .05 & tag$table$logFC>1.5)
+
+#이 수치에 각각의 유전자 이름을 넣어준다. 
+names(genes) <- row.names(tag$table)
+
+#0은 DE가 아닌 유전자, 1은 DE 유전자 
+table(genes)
+genes
+```
+
+```{r}
+#유전자의 길이에 따른 보정 작업을 수행한다. 
+pwf <- nullp(genes,"hg19","geneSymbol")
+```
+GO Enrichment analysis를 수행한다. GO.wall이라는 데이터 프레임에 저장한다. 
+
+```{r}
+head(pwf)
+GO.wall <- goseq(pwf,"hg19","geneSymbol")
+GO.wall
+```
+
+p 값을 다중 비교에 따른 보정을 실시하고, 방법은 False Discovery Rate로 하고 이를 FDR 컬럼에 저장한다. 
+FDR 기준으로 0.05 이하인 GO TERM을 뽑는다. 
+```{r}
+GO.wall$FDR <-p.adjust(GO.wall$over_represented_pvalue, method="fdr")
+GO.wall %>% filter (FDR<0.05)
+```
+그렇다면 각각의 GO TERM에 해당되는 유전자는 어떤 것들이 있을까? 
+
+
+```{r}
+#DE 유전자를 overexpressgene 에 넣고, 
+overexpress<-tag$table %>% filter ((FDR < .05) & (logFC>1.5)) 
+overexpressgene <- rownames(overexpress)
+#해당하는 유전자에 대한 go term association을 뽑는다. 
+golist <- stack(getgo(overexpressgene,'hg19','geneSymbol'))
+```
+```{r}
+golist
+```
+GO:0000278 Mitotic Cell Cycle에 해당하는 유전자만을 선별한다. 
+```{r}
+list <- golist %>% filter (values=='GO:0000278')
+list$ind
+```
+
+해당 유전자만을 유전자 발현 데이터에서 선별한 후 heatmap을 그려 보자. 
+```{r}
+Goterm <-filtered[list$ind,]
+CPM <- cpm(Goterm)
+hmap<-heatmap(CPM)
+```
+재배열한 유전자 목록을 뽑아보자. 
+
+```{r}
+library(writexl)
+newmatrix <- as.matrix(CPM)
+d<-newmatrix[hmap$rowInd,]
+dd<-d[,hmap$colInd]
+as.tibble(dd)
+table <- as_tibble(dd) %>%
+  mutate(gene=rownames(dd))
+write_xlsx(table,'cancer-cellcycle.xlsx')
+```
+
+#연습 
+(FDR < .01) & (logFC>2.0)로 좀 더 Stringent한 조건으로 설정하여 분석을 수행해 보자. Enrichment되는 GO TERM에 변화가 있는가?
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("fgsea")
+```
+
+```{r}
+library(fgsea)
+```
+
+GSEA 분석을 위해서는 Fold Change 혹은 logFC 등의 값을 유전자 이름과 같이 넣어주어야 한다. 
+이를 순위로 변환하여 Enrichment에 이용한다. 
+deframe 기능을 이용하여 rowname을 이름으로, logFC를 값으로 하는 'named vector' 형식으로 변환한다. 
+
+```{r}
+
+#유전자 이름을 컬럼으로 만들어 t라는 데이터프레임에 저장한다. 
+t <- tag$table %>% rownames_to_column() 
+
+
+ranks <- deframe(t[,c('rowname','logFC')])
+t
+ranks
+```
+https://www.gsea-msigdb.org/gsea/index.jsp
+GSEA의 Molecular Signasture Database에서 다운로드받은 Hallmark gene set 목록을 로딩해 준다. 
+(수업자료의 h.all.v7.4.symbols.gmt.txt 파일에 있다) 
+
+
+```{r}
+pathways.hallmark <- gmtPathways('h.all.v7.4.symbols.gmt.txt')
+pathways.hallmark
+```
+GSEA 분석에 사용할 유전자 세트 (pathways.hallmark), Differential Gene Expression Data가 있는 데이터를 fgsea 명령에 넣어 분석을 수행한다. 
+```{r}
+fgseaRes <- fgsea(pathways=pathways.hallmark, stats=ranks, nperm=1000)
+
+#수행된 데이터를 정리한다. 
+fgseaResTidy <- fgseaRes %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+fgseaResTidy %>% 
+  dplyr::select(-leadingEdge, -ES, -nMoreExtreme) %>% 
+  arrange(padj) 
+```
+NES는 Normalized Enrichment Score이다. 만약 overexpression 된 유전자가 해당하는 유전자 세트에 enrich 된 경우 높아지고, underexpression 된 유전자가 enrich될수록 낮아진다.   
+
+
+각각의 유전자 세트별로 Enrichment score의 그래프를 그려 보자. 
+
+```{r, fig.width=10,fig.height=6}
+
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Hallmark pathways NES from GSEA") + 
+  theme_minimal()
+```
+
+
+```{r}
+pathway <- pathways.hallmark %>% 
+  enframe("pathway", "SYMBOL") %>% 
+  unnest() 
+pathway
+```
+
+가장 Enriched 된 유전자 셋인 HALLMARK_E2F_TARGETS에 대한 유전자를 찾아보자. 
+
+```{r}
+hallmark_e2f_targets<-pathway %>% filter (pathway=='HALLMARK_E2F_TARGETS') %>%
+           inner_join(t,by=c("SYMBOL"="rowname")) %>%
+           arrange(desc(logFC))
+hallmark_e2f_targets
+```
+
+이 유전자의 Enichment plot을 그려보자. 
+```{r}
+plotEnrichment(pathways.hallmark[["HALLMARK_E2F_TARGETS"]],ranks)+labs(title="HALLMARK E2F target")
+```
+
+
+Leading Edge 유전자를 찾는다.
+
+```{r}
+le <- fgseaRes %>% filter (pathway=='HALLMARK_E2F_TARGETS') %>%
+  dplyr::select ('leadingEdge') %>%
+  unnest(leadingEdge)
+```
+
+
+
+```{r}
+Goterm <-filtered[le$leadingEdge,]
+CPM <- cpm(Goterm)
+hmap<-heatmap(CPM)
+```
+
+```{r}
+library(writexl)
+newmatrix <- as.matrix(CPM)
+d<-newmatrix[hmap$rowInd,]
+dd<-d[,hmap$colInd]
+as.tibble(dd)
+table <- as_tibble(dd) %>%
+  mutate(gene=rownames(dd))
+write_xlsx(table,'hallmark-E2F.xlsx')
+```
+
+
+```{r}
+plotEnrichment(pathways.hallmark[["HALLMARK_G2M_CHECKPOINT"]],ranks)+labs(title="HALLMARK_G2M_CHECKPOINT")
+```
+Negative하게 Enrichment 되는 Gene Set 은 이러함. 
+
+```{r}
+plotEnrichment(pathways.hallmark[["HALLMARK_MYOGENESIS"]],ranks)+labs(title="HALLMARK_MYOGENESIS")
+```
+
+```{r}
+pathway %>% filter (pathway=='HALLMARK_MYOGENESIS') %>%
+           inner_join(t,by=c("SYMBOL"="rowname")) %>%
+           arrange(logFC)
+           
+```
+
+
+
+
+KEGG 유전자 역시 동일한 방식으로 Enrichment 가 가능하다. 
+```{r}
+pathways.kegg <- gmtPathways('c2.cp.kegg.v7.4.symbols.gmt.txt')
+```
+
+```{r}
+fgseaRes <- fgsea(pathways=pathways.kegg, stats=ranks, nperm=1000)
+
+fgseaResTidy <- fgseaRes %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+fgseaResTidy %>% 
+  dplyr::select(-leadingEdge, -ES, -nMoreExtreme) %>% 
+  arrange(padj) 
+```
+
+
+```{r, fig.width=15,fig.height=12}
+
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Hallmark pathways NES from GSEA") + 
+  theme_minimal()
+```
+
+```{r}
+pathway <- pathways.kegg %>% 
+  enframe("pathway", "SYMBOL") %>% 
+  unnest() 
+pathway %>% filter (pathway=='KEGG_CELL_CYCLE') %>%
+           inner_join(t,by=c("SYMBOL"="rowname"))
+```
+
+```{r}
+plotEnrichment(pathways.kegg[["KEGG_CELL_CYCLE"]],ranks)+labs(title="KEGG_CELL_CYCLE")
+```
+
+```{r}
+plotEnrichment(pathways.kegg[["KEGG_PROTEASOME"]],ranks)+labs(title="KEGG_PROTEOME")
+```
+
+
+
+ER_Status_nature2012=='Negative'
+HER2_Final_Status_nature2012=='Negative'
+PR_Status_nature2012=='Negative'
+
+
