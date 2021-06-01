@@ -1,0 +1,423 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+10강에서 사용한 유방암 환자 데이터를 불러온다. 
+
+```{r}
+library(tidyverse)
+brcasample<-read_tsv('BRCA_clinicalMatrix.dms')
+
+#암 환자 RNA-Seq 데이터를 불러온다. 
+brca_cancer <-read_tsv("brca-rsem-count-tcga-t.txt")
+
+cancer <- colnames(brca_cancer)[3:length(colnames(brca_cancer))]
+samplelist <- tibble (
+             sample = cancer,
+             condition="T"
+)
+
+```
+환자 데이터를 불러오고, 필요한 정보만을 추린다.  환자 샘플 데이터, 무진행 생존기간, HER2 status, PR status, ER status, Metastasis status
+
+```{r}
+samplelist$patient = substr(samplelist$sample,1,12)
+cancersample <- brcasample %>% inner_join(samplelist, by=c("_PATIENT"="patient")) %>%
+                select('sample','OS_Time_nature2012','HER2_Final_Status_nature2012','PR_Status_nature2012','ER_Status_nature2012','Metastasis_nature2012') %>%
+                drop_na('OS_Time_nature2012','HER2_Final_Status_nature2012','PR_Status_nature2012','ER_Status_nature2012','Metastasis_nature2012')
+  
+cancersample
+```
+
+샘플 데이터가 있는 데이터만 추린다. 
+
+```{r}
+brca <- brca_cancer %>% select (cancersample$sample) 
+rownames(brca) <- brca_cancer$Hugo_Symbol
+```
+CPM 을 계산하고, CPM이 10 이 넘는 환자 샘플이 10명 이상인 유전자만 남긴다. 
+이를  dat 에 저장한다. 
+
+```{r}
+library(edgeR)
+library(WGCNA)
+
+cpmbrca <- cpm(brca)
+
+keep <- rowSums(cpmbrca>10) >= 10
+cp <- cpmbrca[keep,]
+dat <- t(cp)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+유전자의 발현을 이용하여 Tree를 그려 보자. 
+
+```{r}
+sampleTree = hclust(dist(dat), method = "average");
+```
+
+```{r, fig.width = 20, fig.height = 12}
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, 
+     cex.axis = 1.5, cex.main = 2)
+
+# Plot a line to show the cut
+abline(h = 70000, col = "red");
+```
+
+지나친 outlier인 샘플을 1개 삭제한다. 1개의 샘플이 삭제되고, 699명의 샘플이 남는다. 
+
+```{r}
+clust = cutreeStatic(sampleTree, cutHeight = 70000, minSize = 10)
+table(clust)
+# clust 1 contains the samples we want to keep.
+keepSamples = (clust==1)
+datExpr = dat[keepSamples, ]
+nGenes = ncol(datExpr)
+nSamples = nrow(datExpr)
+```
+샘플 
+```{r}
+rownames(datExpr)
+```
+
+
+환자 샘플을 정리하여 다음과 같은 포맷으로 바꾼다. 
+
+```{r}
+cs <- cancersample %>% filter (sample %in% rownames(datExpr)) %>%
+                 column_to_rownames(var="sample")
+cs$HER2_Final_Status_nature2012<-as.numeric(as.factor(cs$HER2_Final_Status_nature2012))
+cs$PR_Status_nature2012<-as.numeric(as.factor(cs$PR_Status_nature2012))
+cs$ER_Status_nature2012<-as.numeric(as.factor(cs$ER_Status_nature2012))
+cs$Metastasis_nature2012<-as.numeric(as.factor(cs$Metastasis_nature2012))
+cs
+```
+환자 샘플의 트리와 표현형을 그린다. 
+
+```{r, fig.width = 30, fig.height = 12}
+
+pdf('Tree.pdf',width=13,height=13)
+par(mai=c(6,6,6,6))
+# Re-cluster samples
+sampleTree2 = hclust(dist(datExpr), method = "average")
+# Convert traits to a color representation: white means low, red means high, grey means missing entry
+traitColors = numbers2colors(cs, signed = FALSE);
+# Plot the sample dendrogram and the colors underneath.
+plotDendroAndColors(sampleTree2, traitColors,
+                    groupLabels = names(cs), 
+                    main = "Sample dendrogram and trait heatmap")
+dev.off()
+
+```
+네트워크 
+```{r}
+options(stringsAsFactors = FALSE);
+# Allow multi-threading within WGCNA. At present this call is necessary.
+# Any error here may be ignored but you may want to update WGCNA if you see one.
+# Caution: skip this line if you run RStudio or other third-party R environments.
+# See note above.
+allowWGCNAThreads()
+# Load the data saved in the first part
+
+#=====================================================================================
+#
+#  Code chunk 2
+#
+#=====================================================================================
+
+
+# Choose a set of soft-thresholding powers
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5)
+# Plot the results:
+sizeGrWindow(15, 10)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+     main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     labels=powers,cex=cex1,col="red");
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.90,col="red")
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+     main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+
+```
+
+네트워크의 급수를 4로 설정 
+
+```{r}
+
+softPower = 4;
+adjacency = adjacency(datExpr, power = softPower);
+
+# Turn adjacency into topological overlap
+TOM = TOMsimilarity(adjacency);
+dissTOM = 1-TOM
+
+
+# Call the hierarchical clustering function
+geneTree = hclust(as.dist(dissTOM), method = "average");
+# Plot the resulting clustering tree (dendrogram)
+sizeGrWindow(12,9)
+plot(geneTree, xlab="", sub="", main = "Gene clustering on TOM-based dissimilarity",
+     labels = FALSE, hang = 0.04);
+
+```
+
+모듈을 색으로 나눔 
+
+```{r}
+
+
+# We like large modules, so we set the minimum module size relatively high:
+minModuleSize = 30;
+# Module identification using dynamic tree cut:
+dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,
+                            deepSplit = 2, pamRespectsDendro = FALSE,
+                            minClusterSize = minModuleSize);
+table(dynamicMods)
+
+
+# Convert numeric lables into colors
+dynamicColors = labels2colors(dynamicMods)
+table(dynamicColors)
+# Plot the dendrogram and colors underneath
+sizeGrWindow(8,6)
+plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05,
+                    main = "Gene dendrogram and module colors")
+
+
+```
+
+모듈을 통합하여 소수의 모듈로 줄이자. 
+
+```{r, fig.width = 12, fig.height = 12}
+
+
+# Calculate eigengenes
+MEList = moduleEigengenes(datExpr, colors = dynamicColors)
+MEs = MEList$eigengenes
+# Calculate dissimilarity of module eigengenes
+MEDiss = 1-cor(MEs);
+# Cluster module eigengenes
+METree = hclust(as.dist(MEDiss), method = "average");
+# Plot the result
+sizeGrWindow(7, 6)
+plot(METree, main = "Clustering of module eigengenes",
+     xlab = "", sub = "")
+
+MEDissThres = 0.4
+# Plot the cut line into the dendrogram
+abline(h=MEDissThres, col = "red")
+# Call an automatic merging function
+merge = mergeCloseModules(datExpr, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+# The merged module colors
+mergedColors = merge$colors;
+# Eigengenes of the new merged modules:
+mergedMEs = merge$newMEs;
+```
+
+```{r}
+
+sizeGrWindow(12, 9)
+#pdf(file = "Plots/geneDendro-3.pdf", wi = 9, he = 6)
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors),
+                    c("Dynamic Tree Cut", "Merged dynamic"),
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+#dev.off()
+
+# Rename to moduleColors
+moduleColors = mergedColors
+# Construct numerical labels corresponding to the colors
+colorOrder = c("grey", standardColors(50));
+moduleLabels = match(moduleColors, colorOrder)-1;
+MEs = mergedMEs;
+# Save module colors and labels for use in subsequent parts
+save(MEs, moduleLabels, moduleColors, geneTree, file = "FemaleLiver-02-networkConstruction-stepByStep.RData")
+
+```
+모듈과 표현형과의 관계 
+```{r, fig.width = 12, fig.height = 12}
+
+
+# Define numbers of genes and samples
+nGenes = ncol(datExpr);
+nSamples = nrow(datExpr);
+# Recalculate MEs with color labels
+MEs0 = moduleEigengenes(datExpr, moduleColors)$eigengenes
+MEs = orderMEs(MEs0)
+moduleTraitCor = cor(MEs, cs, use = "p");
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
+
+sizeGrWindow(20,20)
+# Will display correlations and their p-values
+textMatrix =  paste(signif(moduleTraitCor, 2), "\n(",
+                    signif(moduleTraitPvalue, 1), ")", sep = "");
+dim(textMatrix) = dim(moduleTraitCor)
+
+# Display the correlation values within a heatmap plot
+pdf('Module-Trait.pdf',width=13,height=13)
+par(mar = c(9, 9, 9, 9));
+labeledHeatmap(Matrix = moduleTraitCor,
+               xLabels = names(cs),
+               yLabels = names(MEs),
+               ySymbols = names(MEs),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+
+dev.off()
+```
+
+HER2 phenotype과 모듈과의 관계 
+
+```{r}
+# Define variable weight containing the weight column of datTrait
+her2 = as.data.frame(cs$HER2_Final_Status_nature2012);
+names(her2) = "her2"
+# names (colors) of the modules
+modNames = substring(names(MEs), 3)
+
+geneModuleMembership = as.data.frame(cor(datExpr, MEs, use = "p"));
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+
+geneTraitSignificance = as.data.frame(cor(datExpr, her2, use = "p"));
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples));
+
+names(geneTraitSignificance) = paste("GS.", names(her2), sep="");
+names(GSPvalue) = paste("p.GS.", names(her2), sep="");
+
+
+module = "salmon4"
+column = match(module, modNames);
+moduleGenes = moduleColors==module;
+
+sizeGrWindow(7, 7);
+par(mfrow = c(1,1));
+verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]),
+                   abs(geneTraitSignificance[moduleGenes, 1]),
+                   xlab = paste("Module Membership in", module, "module"),
+                   ylab = "Gene significance for her2",
+                   main = paste("Module membership vs. gene significance\n"),
+                   cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = module)
+
+```
+Salmon4 모듈에 있는 유전자는? 
+```{r}
+salmon4 <- geneModuleMembership[moduleGenes,]
+salmon4 <- salmon4 %>% rownames_to_column(var='gene') %>%
+            dplyr::select (gene,MMsalmon4)
+gs <- geneTraitSignificance %>% rownames_to_column(var='gene') %>%
+      inner_join(salmon4, by='gene')
+gs
+```
+
+```{r}
+TOM = TOMsimilarityFromExpr(datExpr, power = 4);
+```
+
+```{r}
+install.packages('igraph')
+```
+
+
+```{r, fig.width = 10, fig.height = 10}
+library(igraph)
+modules <- c("salmon4")
+probes <- rownames(geneModuleMembership)
+inModule <- (moduleColors==modules)
+modProbes <- probes[inModule]
+modTOM <- TOM[inModule,inModule]
+dimnames(modTOM) <- list(modProbes,modProbes)
+graph<-graph.adjacency(modTOM,mode='directed',weighted=TRUE)
+graph<-simplify(graph)
+par(mar=c(0,0,0,0))
+#graph<- delete.vertices(graph, degree(graph)==0)
+plot(graph,
+     layout=layout.fruchterman.reingold(graph, weights=E(graph)$weight),
+     edge.arrow.size=0.1
+     )
+```
+
+
+ER Response관련 모듈 
+
+```{r}
+er2 = as.data.frame(cs$ER_Status_nature2012);
+names(er2) = "er2"
+# names (colors) of the modules
+modNames = substring(names(MEs), 3)
+
+geneModuleMembership = as.data.frame(cor(datExpr, MEs, use = "p"));
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+
+geneTraitSignificance = as.data.frame(cor(datExpr, er2, use = "p"));
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples));
+
+names(geneTraitSignificance) = paste("GS.", names(er2), sep="");
+names(GSPvalue) = paste("p.GS.", names(er2), sep="");
+
+module = "green"
+column = match(module, modNames);
+moduleGenes = moduleColors==module;
+
+sizeGrWindow(7, 7);
+par(mfrow = c(1,1));
+verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]),
+                   abs(geneTraitSignificance[moduleGenes, 1]),
+                   xlab = paste("Module Membership in", module, "module"),
+                   ylab = "Gene significance for ER",
+                   main = paste("Module membership vs. gene significance\n"),
+                   cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = module)
+
+```
+
+```{r}
+cyan <- geneModuleMembership[moduleGenes,]
+cyan <- cyan %>% rownames_to_column(var='gene') %>%
+            dplyr::select (gene,MMcyan)
+gs <- geneTraitSignificance %>% rownames_to_column(var='gene') %>%
+      inner_join(cyan, by='gene')
+```
+
+Cyan 모듈의 유전자들의 Go term 분석 
+
+```{r}
+library(goseq)
+genes <- as.integer(moduleGenes)
+names(genes)<-rownames(geneModuleMembership)
+pwf <- nullp(genes,"hg19","geneSymbol")
+GO.wall <- goseq(pwf,"hg19","geneSymbol")
+GO.wall$FDR <-p.adjust(GO.wall$over_represented_pvalue, method="fdr")
+
+```
+
